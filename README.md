@@ -1,7 +1,9 @@
 # The Instagram agent skill
 
-Thirteen Claude skills that run an Instagram account. Free, MIT, no signup, no
-API key, nothing to connect.
+Fourteen Claude skills that run an Instagram account. Free, MIT, no signup.
+Thirteen need no API key and connect to nothing; the fourteenth, `/ig-publish`,
+publishes and schedules through Instagram's official API when you give it a
+token.
 
 One of them writes your Reels off 26 hook formulas and scores the hook before
 you waste a take on it. One goes and finds the reels that are actually working
@@ -15,7 +17,8 @@ the em dashes, the slop vocabulary and the invisible watermark characters out
 of a draft, then scores what is left against a five-check panel before you ever
 see it.
 
-**Nothing gets posted until you say yes.** These skills write. You post.
+**Nothing gets posted until you say yes.** These skills write. You approve.
+`/ig-publish` posts only what you approved, and only through the official API.
 
 ## Install
 
@@ -52,7 +55,7 @@ reels and say "write my voice.md from these". Every skill reads that file. It
 matters more here than on other platforms, because you have to say the words
 out loud.
 
-## The thirteen
+## The fourteen
 
 | command | what it does |
 | --- | --- |
@@ -69,6 +72,7 @@ out loud.
 | `/ig-dm` | The keyword delivery, the first message, the collab pitch, and the two follow-ups. Two. |
 | `/ig-repurpose` | One video, podcast or newsletter into a week of reels and carousels that each stand alone. |
 | `/ig-audit` | Post-mortem on what you already posted. Ranks by outlier multiple and sends per reach, not views. |
+| `/ig-publish` | Publishes images, Reels, carousels and stories through the official Content Publishing API, now or from a scheduled queue run by cron. Dry run by default; unapproved posts never go out. |
 
 ## The five tools that actually run
 
@@ -269,15 +273,18 @@ on `yt-dlp`, but the method is four lines and is written out in
 
 ## The fine print, which is the honest part
 
-**These skills do not post to Instagram.** There is a real Content Publishing
-API for Professional accounts, and it needs a Meta developer app, a linked
-Page, a long-lived token and app review, which is not a thing a skill can hand
-you. Everything else people use to automate posting, commenting, following or
+**Only `/ig-publish` posts, and only through the official API.** The Content
+Publishing API works for Professional accounts and needs a Meta developer app
+and a long-lived token, which you make yourself once;
+[`/ig-publish`](skills/ig-publish/SKILL.md) walks through it. Without a token,
+it is a dry run that prints the calls it would make.
+
+Everything else people use to automate posting, commenting, following or
 DMing is browser automation or a third-party tool, and both violate
 [Instagram's Terms of Use](https://help.instagram.com/581066165581870) and get
-accounts action-blocked. So every skill here ends the same way: a copy-ready
-block, and you post it. That is not a limitation bolted on afterwards, it is
-the design, and it is why the approval gate is real rather than a setting.
+accounts action-blocked. So every other skill ends the same way: a copy-ready
+block, and you post it or hand it to `/ig-publish`. That is not a limitation
+bolted on afterwards, it is the design, and it is why the approval gate is real rather than a setting.
 
 The one exception is keyword auto-replies in DMs, which Instagram supports
 through its own tools and approved partners, and which only fire after somebody
@@ -323,8 +330,32 @@ skills/ig-human/humanize.py        the three cleaning passes
 skills/ig-human/detect.py          the five-check panel
 skills/ig-viral/swipe.py           outlier ranking and formula classification
 skills/ig-profile/rubric.json      the 100-point profile score
+skills/ig-publish/publish.py       official-API publishing and the scheduled queue
 templates/voice.md                 your voice profile. Fill this in first.
 ```
+
+## По-русски: автопостинг
+
+`/ig-publish` публикует фото, Reels, карусели и сторис через официальный API
+Instagram и ставит посты в очередь по расписанию. Без ботов в браузере и без
+пароля, поэтому аккаунт не блокируют.
+
+1. Переведите аккаунт в профессиональный (Бизнес или Автор).
+2. Создайте приложение на developers.facebook.com, добавьте продукт Instagram
+   и получите долгосрочный токен с правом `instagram_business_content_publish`.
+3. `export IG_ACCESS_TOKEN=...`, затем `python3 publish.py whoami`.
+4. Медиа должны лежать по публичной ссылке `https://`.
+
+```bash
+python3 publish.py post reel https://.../clip.mp4 --caption-file cap.txt          # пробный запуск
+python3 publish.py post reel https://.../clip.mp4 --caption-file cap.txt --live   # публикация
+python3 publish.py queue add q.json image https://.../1.jpg --at 2026-11-03T18:00+06:00
+python3 publish.py queue approve q.json 1
+python3 publish.py queue run q.json --live     # в cron каждые 15 минут
+```
+
+Без `--live` ничего не публикуется. Посты без `approve` не выходят даже по
+расписанию.
 
 ## Credit
 
