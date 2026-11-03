@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The test build shows a different name, so it is easy to tell apart from the Google Play version. -->
+    <string name="app_name">Пятнашки (тест)</string>
+</resources>

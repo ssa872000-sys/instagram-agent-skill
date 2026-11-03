@@ -2,21 +2,55 @@ plugins {
     id 'com.android.application'
 }
 
+// Google Play upload key. It is never stored in the repository: GitHub Actions restores
+// it from secrets into SIGNING_KEYSTORE_PATH; on a computer, put upload-keystore.p12
+// next to settings.gradle (it is git-ignored). The password comes from SIGNING_PASSWORD.
+// Without both, release builds are left unsigned.
+def signingPassword = System.getenv('SIGNING_PASSWORD')
+def keystorePath = System.getenv('SIGNING_KEYSTORE_PATH')
+def uploadKeystore = keystorePath ? file(keystorePath) : rootProject.file('upload-keystore.p12')
+def canSign = signingPassword && uploadKeystore.exists()
+
+// Google Play rejects an upload whose versionCode it has already seen, so every
+// GitHub Actions build gets the next number automatically.
+def buildNumber = (System.getenv('GITHUB_RUN_NUMBER') ?: '1').toInteger()
+
 android {
     namespace 'com.puzzle.game'
-    compileSdk 35
+    compileSdk 36
 
     defaultConfig {
-        applicationId 'com.puzzle.game'
+        // The app's permanent ID on Google Play. It cannot change after the first upload.
+        applicationId 'io.github.ssa872000sys.pyatnashki'
         minSdk 24
-        targetSdk 35
-        versionCode 1
+        targetSdk 36
+        versionCode buildNumber
         versionName '1.0'
     }
 
+    signingConfigs {
+        if (canSign) {
+            upload {
+                storeFile uploadKeystore
+                storeType 'pkcs12'
+                storePassword signingPassword
+                keyAlias 'upload'
+                keyPassword signingPassword
+            }
+        }
+    }
+
     buildTypes {
+        debug {
+            // The test build installs next to the Google Play version instead of replacing it.
+            applicationIdSuffix '.test'
+            versionNameSuffix '-test'
+        }
         release {
             minifyEnabled false
+            if (canSign) {
+                signingConfig signingConfigs.upload
+            }
         }
     }
 

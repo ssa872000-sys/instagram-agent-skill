@@ -1,4 +1,4 @@
-name: Build Android APK
+name: Build Android app
 
 on:
   push:
@@ -10,6 +10,10 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      # Google Play upload key: the keystore file as base64 text, and its password.
+      SIGNING_KEYSTORE_BASE64: ${{ secrets.SIGNING_KEYSTORE_BASE64 }}
+      SIGNING_PASSWORD: ${{ secrets.SIGNING_PASSWORD }}
     defaults:
       run:
         working-directory: puzzle-game-android
@@ -23,15 +27,38 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
-      - name: Build debug APK
+      - name: Restore upload key
+        if: env.SIGNING_KEYSTORE_BASE64 != '' && env.SIGNING_PASSWORD != ''
+        run: |
+          echo "$SIGNING_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/upload-keystore.p12"
+          echo "SIGNING_KEYSTORE_PATH=$RUNNER_TEMP/upload-keystore.p12" >> "$GITHUB_ENV"
+
+      # Builds the test APK and the Google Play bundle (.aab). The bundle is signed only
+      # when the upload key was restored; otherwise it is built just to check it compiles.
+      - name: Build
         run: |
           chmod +x gradlew
-          ./gradlew assembleDebug --no-daemon
-
-      - name: Rename APK
-        run: cp app/build/outputs/apk/debug/app-debug.apk pyatnashki.apk
+          ./gradlew assembleDebug bundleRelease --no-daemon
+          cp app/build/outputs/apk/debug/app-debug.apk pyatnashki-test.apk
 
       - uses: actions/upload-artifact@v4
         with:
-          name: pyatnashki-apk
-          path: puzzle-game-android/pyatnashki.apk
+          name: pyatnashki-test-apk
+          path: puzzle-game-android/pyatnashki-test.apk
+
+      - name: Check Google Play bundle signature
+        if: env.SIGNING_KEYSTORE_PATH != ''
+        run: |
+          cp app/build/outputs/bundle/release/app-release.aab pyatnashki-google-play.aab
+          jarsigner -verify pyatnashki-google-play.aab
+          keytool -printcert -jarfile pyatnashki-google-play.aab | grep -E 'Owner|SHA256'
+
+      - uses: actions/upload-artifact@v4
+        if: env.SIGNING_KEYSTORE_PATH != ''
+        with:
+          name: pyatnashki-google-play-aab
+          path: puzzle-game-android/pyatnashki-google-play.aab
+
+      - name: Upload key missing
+        if: env.SIGNING_KEYSTORE_PATH == ''
+        run: echo "::warning::Secrets SIGNING_KEYSTORE_BASE64 and SIGNING_PASSWORD are not set, so no Google Play file (.aab) was produced. See puzzle-game-android/README.md."
