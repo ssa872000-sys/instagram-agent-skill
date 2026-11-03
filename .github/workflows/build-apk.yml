@@ -30,7 +30,8 @@ jobs:
       - name: Restore upload key
         if: env.SIGNING_KEYSTORE_BASE64 != '' && env.SIGNING_PASSWORD != ''
         run: |
-          echo "$SIGNING_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/upload-keystore.p12"
+          # -i skips spaces or line breaks that copy-pasting into the secret may add.
+          echo "$SIGNING_KEYSTORE_BASE64" | base64 -d -i > "$RUNNER_TEMP/upload-keystore.p12"
           echo "SIGNING_KEYSTORE_PATH=$RUNNER_TEMP/upload-keystore.p12" >> "$GITHUB_ENV"
 
       # Builds the test APK and the Google Play bundle (.aab). The bundle is signed only
@@ -46,11 +47,12 @@ jobs:
           name: pyatnashki-test-apk
           path: puzzle-game-android/pyatnashki-test.apk
 
+      # jarsigner -verify exits 0 even for an unsigned file, so look for its success line.
       - name: Check Google Play bundle signature
         if: env.SIGNING_KEYSTORE_PATH != ''
         run: |
           cp app/build/outputs/bundle/release/app-release.aab pyatnashki-google-play.aab
-          jarsigner -verify pyatnashki-google-play.aab
+          jarsigner -verify pyatnashki-google-play.aab | grep -x 'jar verified.'
           keytool -printcert -jarfile pyatnashki-google-play.aab | grep -E 'Owner|SHA256'
 
       - uses: actions/upload-artifact@v4
@@ -62,3 +64,16 @@ jobs:
       - name: Upload key missing
         if: env.SIGNING_KEYSTORE_PATH == ''
         run: echo "::warning::Secrets SIGNING_KEYSTORE_BASE64 and SIGNING_PASSWORD are not set, so no Google Play file (.aab) was produced. See puzzle-game-android/README.md."
+
+      # Without the real key, still prove that release signing works, using a throwaway
+      # key. This bundle is deleted right away and must never be uploaded to Google Play.
+      - name: Check release signing with a throwaway key
+        if: env.SIGNING_KEYSTORE_PATH == ''
+        run: |
+          export SIGNING_KEYSTORE_PATH="$RUNNER_TEMP/throwaway.p12" SIGNING_PASSWORD=throwaway-password
+          keytool -genkeypair -storetype PKCS12 -keystore "$SIGNING_KEYSTORE_PATH" -alias upload \
+            -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Throwaway" \
+            -storepass "$SIGNING_PASSWORD" -keypass "$SIGNING_PASSWORD"
+          ./gradlew bundleRelease --no-daemon -q
+          jarsigner -verify app/build/outputs/bundle/release/app-release.aab | grep -x 'jar verified.'
+          rm app/build/outputs/bundle/release/app-release.aab "$SIGNING_KEYSTORE_PATH"
